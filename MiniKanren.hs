@@ -30,9 +30,11 @@ fresh :: (Term a -> Int -> Substitution a -> [Substitution a]) ->
           Int -> Substitution a -> [Substitution a]
 fresh fn c = fn (Var $ "Var" ++ show c) (c + 1)
 
-(===) :: Term a -> Term a ->
+(===) :: Eq a => Term a -> Term a ->
          Int -> Substitution a -> [Substitution a]
-(===) = undefined
+(===) p q _ subs = case unify subs p q of
+    Nothing -> []
+    Just subs' -> [subs']
 
 conj :: (Int -> Substitution a -> [Substitution a]) ->
         (Int -> Substitution a -> [Substitution a]) ->
