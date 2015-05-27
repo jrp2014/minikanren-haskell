@@ -40,14 +40,10 @@ fresh fn c = fn (Var $ "Var" ++ show c) (c + 1)
     Just subs' -> [subs'])
 
 conj :: LogicOp a -> LogicOp a -> LogicOp a
-conj x y c subs = (c'', resSubs)
-    where
-        (c', subss) = x c subs
-        (c'', subss') = y c' subs
-        resSubs = do
-            subs' <- subss
-            subs'' <- subss'
-            return $ subs' ++ subs''
+conj x y c subs = foldl (\(c'', resSubss) subs' -> let (c''', subss') = y c'' subs' in
+    (c''', subss' ++ resSubss))
+    (c', []) subss
+    where (c', subss) = x c subs
 
 conde :: LogicOp a -> LogicOp a -> LogicOp a
 conde x y c subs = (c'', subss ++ subss')
