@@ -26,9 +26,9 @@ unify subs t u = case (walk subs t, walk subs u) of
     (Data x, Data y) | x == y -> return subs
     _ -> Nothing
 
-fresh :: (LogicVar -> Int -> Substitution a -> [Substitution a]) ->
+fresh :: (Term a -> Int -> Substitution a -> [Substitution a]) ->
           Int -> Substitution a -> [Substitution a]
-fresh = undefined
+fresh fn c = fn (Var $ "Var" ++ show c) (c + 1)
 
 (===) :: Term a -> Term a ->
          Int -> Substitution a -> [Substitution a]
