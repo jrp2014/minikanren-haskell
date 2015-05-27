@@ -26,26 +26,32 @@ unify subs t u = case (walk subs t, walk subs u) of
     (Data x, Data y) | x == y -> return subs
     _ -> Nothing
 
-run :: (Int -> Substitution a -> [Substitution a]) -> [Substitution a]
-run fn = fn 0 []
+type LogicOp a = Int -> Substitution a -> (Int, [Substitution a])
 
-fresh :: (Term a -> Int -> Substitution a -> [Substitution a]) ->
-          Int -> Substitution a -> [Substitution a]
+run :: LogicOp a -> [Substitution a]
+run fn = subs where (_, subs) = fn 0 []
+
+fresh :: (Term a -> LogicOp a) -> LogicOp a
 fresh fn c = fn (Var $ "Var" ++ show c) (c + 1)
 
-(===) :: Eq a => Term a -> Term a ->
-         Int -> Substitution a -> [Substitution a]
-(===) p q _ subs = case unify subs p q of
+(===) :: Eq a => Term a -> Term a -> LogicOp a
+(===) p q c subs = (c, case unify subs p q of
     Nothing -> []
-    Just subs' -> [subs']
+    Just subs' -> [subs'])
 
-conj :: (Int -> Substitution a -> [Substitution a]) ->
-        (Int -> Substitution a -> [Substitution a]) ->
-        Int -> Substitution a -> [Substitution a]
-conj = undefined
+conj :: LogicOp a -> LogicOp a -> LogicOp a
+conj x y c subs = (c'', resSubs)
+    where
+        (c', subss) = x c subs
+        (c'', subss') = y c' subs
+        resSubs = do
+            subs' <- subss
+            subs'' <- subss'
+            return $ subs' ++ subs''
 
-conde :: (Int -> Substitution a -> [Substitution a]) ->
-         (Int -> Substitution a -> [Substitution a]) ->
-         Int -> Substitution a -> [Substitution a]
-conde = undefined
+conde :: LogicOp a -> LogicOp a -> LogicOp a
+conde x y c subs = (c'', subss ++ subss')
+    where
+        (c', subss) = x c subs
+        (c'', subss') = y c' subs
 
