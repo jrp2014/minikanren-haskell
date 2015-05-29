@@ -2,7 +2,7 @@ module Test where
 
 import MiniKanren
 
-appendo xs ys res = do
+appendo xs ys res =
     conde
         (conj
             (xs === List [])
