@@ -28,14 +28,15 @@ unify subs t u = case (walk subs t, walk subs u) of
     _ -> Nothing
 
 type LogicOp a = Int -> Substitution a -> [(Int, Substitution a)]
+type QueryProgram a = Term a -> LogicOp a
 
-runAll :: LogicOp a -> [Substitution a]
-runAll program = map snd $ program 0 []
+runAll :: QueryProgram a -> [Term a]
+runAll program = map (reify (Var "q") . snd) $ program (Var "q") 0 []
 
-run :: Int -> LogicOp a -> [Substitution a]
+run :: Int -> QueryProgram a -> [Term a]
 run solutions program = take solutions $ runAll program
 
-runStep :: Show a => LogicOp a -> IO Bool
+runStep :: Show a => QueryProgram a -> IO Bool
 runStep program = loop (runAll program)
     where
         loop [] = return False
