@@ -44,3 +44,25 @@ testBack1 = run $
                     (conj
                         (b === fromList (map Data [4,5]))
                         (appendo a b c))
+
+nsDF n x = condeDepthFirst (x === Data n) (nsDF n x)
+testNumbersDF = take 10 $ run $ fresh $ \x -> condeDepthFirst (nsDF 5 x) (nsDF 6 x)
+
+ns n x = conde (x === Data n) (ns n x)
+testNumbers = take 10 $ run $ fresh $ \x -> conde (ns 5 x) (ns 6 x)
+
+-- warum funktioniert das nicht: (geht in eine unendliche schleife)
+-- für together?
+-- together [] xs = xs
+-- together xs [] = xs
+-- together (x:xs) (y:ys) = x : y : together xs ys
+
+-- bei dem falschen
+-- sixes = together [6] sixes
+--       = 6 : (head $ together [6] sixes) : together [6] sixes
+--       = 6 : (head $ 6 : (head $ together [6] sixes) : together [6] sixes) :
+--            together [6] sixes
+-- bei dem richtigen:
+-- sixes = together [6] sixes
+--       = x : together sixes []
+--       = x : x : together

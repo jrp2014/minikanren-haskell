@@ -42,5 +42,13 @@ fresh fn c = fn (Var c) (c + 1)
 conj :: LogicOp a -> LogicOp a -> LogicOp a
 conj x y c subs = concatMap (uncurry y) $ x c subs
 
+condeDepthFirst :: LogicOp a -> LogicOp a -> LogicOp a
+condeDepthFirst x y c subs = x c subs ++ y c subs
+
+together :: [a] -> [a] -> [a]
+together [] xs = xs
+together (x:xs) ys = x : together ys xs
+
 conde :: LogicOp a -> LogicOp a -> LogicOp a
-conde x y c subs = x c subs ++ y c subs
+conde x y c subs = together (x c subs) (y c subs)
+
