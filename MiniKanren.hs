@@ -49,21 +49,26 @@ runStep program = loop (runAll program)
 fresh :: (Term a -> LogicOp a) -> LogicOp a
 fresh fn c = fn (Var c) (c + 1)
 
+freshs :: Int -> ([Term a] -> LogicOp a) -> LogicOp a
+freshs n fn c = fn (map Var [c..c+n-1]) (c+n)
+
 (===) :: Eq a => Term a -> Term a -> LogicOp a
 (===) p q c subs = case unify subs p q of
     Nothing -> []
     Just subs' -> [(c, subs')]
 
-conj :: LogicOp a -> LogicOp a -> LogicOp a
-conj x y c subs = concatMap (uncurry y) $ x c subs
+conj :: [LogicOp a] -> LogicOp a
+conj = foldr conj1 (\c subs -> [(c, subs)])
+    where conj1 x y c subs = concatMap (uncurry y) $ x c subs
 
-condeDepthFirst :: LogicOp a -> LogicOp a -> LogicOp a
-condeDepthFirst x y c subs = x c subs ++ y c subs
+condeDepthFirst :: [LogicOp a] -> LogicOp a
+condeDepthFirst = foldr condeDepthFirst1 (\_ _ -> [])
+    where condeDepthFirst1 x y c subs = x c subs ++ y c subs
 
-together :: [a] -> [a] -> [a]
-together [] xs = xs
-together (x:xs) ys = x : together ys xs
-
-conde :: LogicOp a -> LogicOp a -> LogicOp a
-conde x y c subs = together (x c subs) (y c subs)
+conde :: [LogicOp a] -> LogicOp a
+conde = foldr conde1 (\_ _ -> [])
+    where
+        conde1 x y c subs = together (x c subs) (y c subs)
+        together [] xs = xs
+        together (x:xs) ys = x : together ys xs
 
