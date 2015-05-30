@@ -1,6 +1,7 @@
 module MiniKanren where
 
 import Control.Monad (foldM)
+import System.IO (hFlush, stdout)
 
 type LogicVar = Int
 data Term a
@@ -28,8 +29,22 @@ unify subs t u = case (walk subs t, walk subs u) of
 
 type LogicOp a = Int -> Substitution a -> [(Int, Substitution a)]
 
-run :: LogicOp a -> [Substitution a]
-run fn = map snd $ fn 0 []
+runAll :: LogicOp a -> [Substitution a]
+runAll program = map snd $ program 0 []
+
+run :: Int -> LogicOp a -> [Substitution a]
+run solutions program = take solutions $ runAll program
+
+runStep :: Show a => LogicOp a -> IO Bool
+runStep program = loop (runAll program)
+    where
+        loop [] = return False
+        loop (subs:subss) = do
+            putStr (show subs ++ " "); hFlush stdout
+            userAction <- getLine
+            case userAction of
+                "" -> loop subss
+                _ -> return True
 
 fresh :: (Term a -> LogicOp a) -> LogicOp a
 fresh fn c = fn (Var c) (c + 1)
