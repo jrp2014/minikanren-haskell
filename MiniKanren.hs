@@ -3,7 +3,7 @@ module MiniKanren where
 import Control.Monad (foldM)
 import System.IO (hFlush, stdout)
 
-type LogicVar = Int
+type LogicVar = String
 data Term a
     = Var LogicVar
     | Data a
@@ -47,10 +47,10 @@ runStep program = loop (runAll program)
                 _ -> return True
 
 fresh :: (Term a -> LogicOp a) -> LogicOp a
-fresh fn c = fn (Var c) (c + 1)
+fresh fn c = fn (Var $ show c) (c + 1)
 
 freshs :: Int -> ([Term a] -> LogicOp a) -> LogicOp a
-freshs n fn c = fn (map Var [c..c+n-1]) (c+n)
+freshs n fn c = fn (map (Var . show) [c..c+n-1]) (c+n)
 
 (===) :: Eq a => Term a -> Term a -> LogicOp a
 (===) p q c subs = case unify subs p q of
@@ -72,3 +72,18 @@ conde = foldr conde1 (\_ _ -> [])
         together [] xs = xs
         together (x:xs) ys = x : together ys xs
 
+reify :: Term a -> Substitution a -> Term a
+reify v s = walkStar v' (reifyS v' [])
+    where v' = walkStar v s
+
+walkStar :: Term a -> Substitution a -> Term a
+walkStar v s = case v' of
+    List terms -> List $ map (`walkStar` s) terms
+    _ -> v'
+    where v' = walk s v
+
+reifyS :: Term a -> Substitution a -> Substitution a
+reifyS v s = case walk s v of
+    Var name -> (name, Var $ "_" ++ show (length s)) : s
+    List terms -> foldl (flip reifyS) s terms
+    Data _ -> s
