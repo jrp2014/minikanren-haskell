@@ -2,7 +2,7 @@ module MiniKanren where
 
 import Control.Monad (foldM)
 
-type LogicVar = String
+type LogicVar = Int
 data Term a
     = Var LogicVar
     | Data a
@@ -26,28 +26,21 @@ unify subs t u = case (walk subs t, walk subs u) of
     (Data x, Data y) | x == y -> return subs
     _ -> Nothing
 
-type LogicOp a = Int -> Substitution a -> (Int, [Substitution a])
+type LogicOp a = Int -> Substitution a -> [(Int, Substitution a)]
 
 run :: LogicOp a -> [Substitution a]
-run fn = subs where (_, subs) = fn 0 []
+run fn = map snd $ fn 0 []
 
 fresh :: (Term a -> LogicOp a) -> LogicOp a
-fresh fn c = fn (Var $ "Var" ++ show c) (c + 1)
+fresh fn c = fn (Var c) (c + 1)
 
 (===) :: Eq a => Term a -> Term a -> LogicOp a
-(===) p q c subs = (c, case unify subs p q of
+(===) p q c subs = case unify subs p q of
     Nothing -> []
-    Just subs' -> [subs'])
+    Just subs' -> [(c, subs')]
 
 conj :: LogicOp a -> LogicOp a -> LogicOp a
-conj x y c subs = foldl (\(c'', resSubss) subs' -> let (c''', subss') = y c'' subs' in
-    (c''', subss' ++ resSubss))
-    (c', []) subss
-    where (c', subss) = x c subs
+conj x y c subs = concatMap (uncurry y) $ x c subs
 
 conde :: LogicOp a -> LogicOp a -> LogicOp a
-conde x y c subs = (c'', subss ++ subss')
-    where
-        (c', subss) = x c subs
-        (c'', subss') = y c' subs
-
+conde x y c subs = x c subs ++ y c subs
