@@ -9,12 +9,19 @@ data Term a
     | Data a
     | List [Term a]
     deriving (Show, Eq, Read)
+data ProgramState a = ProgramState
+    { counter :: Int
+    , substitution :: Substitution a
+--    , assertions :: Assertion a
+    }
 type Substitution a = [(LogicVar, Term a)] -- TODO: Map?
-type LogicOp a = Int -> Substitution a -> [(Int, Substitution a)]
+-- type Assertion a = [(LogicVar, Term a -> Bool)]
+type LogicOp a = ProgramState a -> [ProgramState a]
 type QueryProgram a = Term a -> LogicOp a
 
 runAll :: QueryProgram a -> [Term a]
-runAll program = map (reify (Var "q") . snd) $ program (Var "q") 0 []
+runAll program = map (reify (Var "q") . substitution) $
+    program (Var "q") $ ProgramState 0 []
 
 run :: Int -> QueryProgram a -> [Term a]
 run solutions program = take solutions $ runAll program
@@ -31,15 +38,16 @@ runStep program = loop (runAll program)
                 _ -> return True
 
 fresh :: (Term a -> LogicOp a) -> LogicOp a
-fresh fn c = fn (Var $ show c) (c + 1)
+fresh fn ps = fn (Var $ show $ counter ps) (ps { counter = counter ps + 1 })
 
 freshs :: Int -> ([Term a] -> LogicOp a) -> LogicOp a
-freshs n fn c = fn (map (Var . show) [c..c+n-1]) (c+n)
+freshs n fn ps = fn (map (Var . show) [counter ps..counter ps + n-1])
+    (ps { counter = counter ps + n })
 
 (===) :: Eq a => Term a -> Term a -> LogicOp a
-(===) p q c subs = case unify subs p q of
+(===) p q ps = case unify (substitution ps) p q of
     Nothing -> []
-    Just subs' -> [(c, subs')]
+    Just subs -> [ps { substitution = subs }]
 
 walk :: Substitution a -> Term a -> Term a
 walk subs (Var var) = case lookup var subs of
@@ -74,17 +82,17 @@ reifyS v s = case walk s v of
     Data _ -> s
 
 conj :: [LogicOp a] -> LogicOp a
-conj = foldr conj1 (\c subs -> [(c, subs)])
-    where conj1 x y c subs = concatMap (uncurry y) $ x c subs
+conj = foldr conj1 return
+    where conj1 x y ps = concatMap y $ x ps
 
 condeDepthFirst :: [LogicOp a] -> LogicOp a
-condeDepthFirst = foldr condeDepthFirst1 (\_ _ -> [])
-    where condeDepthFirst1 x y c subs = x c subs ++ y c subs
+condeDepthFirst = foldr condeDepthFirst1 (const [])
+    where condeDepthFirst1 x y ps = x ps ++ y ps
 
 conde :: [LogicOp a] -> LogicOp a
-conde = foldr conde1 (\_ _ -> [])
+conde = foldr conde1 (const [])
     where
-        conde1 x y c subs = together (x c subs) (y c subs)
+        conde1 x y ps = together (x ps) (y ps)
         together [] xs = xs
         together (x:xs) ys = x : together ys xs
 
