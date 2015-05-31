@@ -10,23 +10,6 @@ data Term a
     | List [Term a]
     deriving (Show, Eq, Read)
 type Substitution a = [(LogicVar, Term a)] -- TODO: Map?
-
-walk :: Substitution a -> Term a -> Term a
-walk subs (Var var) = case lookup var subs of
-    Nothing -> Var var
-    Just term -> walk subs term
-walk _    other     = other
-
-unify :: Eq a => Substitution a -> Term a -> Term a -> Maybe (Substitution a)
-unify subs t u = case (walk subs t, walk subs u) of
-    (Var v, Var w) | v == w -> return subs
-    (Var v, term) -> return $ (v, term) : subs
-    (term, Var v) -> return $ (v, term) : subs
-    (List vs, List us) | length vs == length us ->
-        foldM (\subs' (v, w) -> unify subs' v w) subs $ zip vs us
-    (Data x, Data y) | x == y -> return subs
-    _ -> Nothing
-
 type LogicOp a = Int -> Substitution a -> [(Int, Substitution a)]
 type QueryProgram a = Term a -> LogicOp a
 
@@ -58,20 +41,21 @@ freshs n fn c = fn (map (Var . show) [c..c+n-1]) (c+n)
     Nothing -> []
     Just subs' -> [(c, subs')]
 
-conj :: [LogicOp a] -> LogicOp a
-conj = foldr conj1 (\c subs -> [(c, subs)])
-    where conj1 x y c subs = concatMap (uncurry y) $ x c subs
+walk :: Substitution a -> Term a -> Term a
+walk subs (Var var) = case lookup var subs of
+    Nothing -> Var var
+    Just term -> walk subs term
+walk _    other     = other
 
-condeDepthFirst :: [LogicOp a] -> LogicOp a
-condeDepthFirst = foldr condeDepthFirst1 (\_ _ -> [])
-    where condeDepthFirst1 x y c subs = x c subs ++ y c subs
-
-conde :: [LogicOp a] -> LogicOp a
-conde = foldr conde1 (\_ _ -> [])
-    where
-        conde1 x y c subs = together (x c subs) (y c subs)
-        together [] xs = xs
-        together (x:xs) ys = x : together ys xs
+unify :: Eq a => Substitution a -> Term a -> Term a -> Maybe (Substitution a)
+unify subs t u = case (walk subs t, walk subs u) of
+    (Var v, Var w) | v == w -> return subs
+    (Var v, term) -> return $ (v, term) : subs
+    (term, Var v) -> return $ (v, term) : subs
+    (List vs, List us) | length vs == length us ->
+        foldM (\subs' (v, w) -> unify subs' v w) subs $ zip vs us
+    (Data x, Data y) | x == y -> return subs
+    _ -> Nothing
 
 reify :: Term a -> Substitution a -> Term a
 reify v s = walkStar v' (reifyS v' [])
@@ -88,3 +72,19 @@ reifyS v s = case walk s v of
     Var name -> (name, Var $ "_" ++ show (length s)) : s
     List terms -> foldl (flip reifyS) s terms
     Data _ -> s
+
+conj :: [LogicOp a] -> LogicOp a
+conj = foldr conj1 (\c subs -> [(c, subs)])
+    where conj1 x y c subs = concatMap (uncurry y) $ x c subs
+
+condeDepthFirst :: [LogicOp a] -> LogicOp a
+condeDepthFirst = foldr condeDepthFirst1 (\_ _ -> [])
+    where condeDepthFirst1 x y c subs = x c subs ++ y c subs
+
+conde :: [LogicOp a] -> LogicOp a
+conde = foldr conde1 (\_ _ -> [])
+    where
+        conde1 x y c subs = together (x c subs) (y c subs)
+        together [] xs = xs
+        together (x:xs) ys = x : together ys xs
+
