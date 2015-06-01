@@ -15,21 +15,20 @@ toList (List [car, cdr]) = car : toList cdr
 toList (List []) = []
 toList x = [x]
 
-fromList :: [Term a] -> Term a
-fromList (t:ts) = List [t, fromList ts]
-fromList [] = List []
+fromList :: [a] -> Term a
+fromList xs = foldr (\x acc -> List [Data x, acc]) (List []) xs
 
 test = runAll $ \q -> freshs 3 $ \[a,b,c] ->
     conj
-        [a === fromList (map Data [1,2,3]),
-         b === fromList (map Data [4,5]),
+        [a === fromList [1,2,3],
+         b === fromList [4,5],
          appendo a b c,
          q === List [a,b,c]]
 
 testBack1 = runAll $ \a -> freshs 2 $ \[b,c] ->
     conj
-        [c === fromList (map Data [1,2,3,4,5]),
-         b === fromList (map Data [4,5]),
+        [c === fromList [1,2,3,4,5],
+         b === fromList [4,5],
          appendo a b c]
 
 nsDF n x = condeDepthFirst [x === Data n, nsDF n x]
@@ -53,3 +52,26 @@ testNumbers = run 10 $ \x -> conde [ns 5 x, ns 6 x]
 -- sixes = together [6] sixes
 --       = x : together sixes []
 --       = x : x : together
+
+
+rembero x ls out = conde
+    [conj
+        [ls === List [],
+         out === List []],
+     freshs 2 $ \[a,d] ->
+       conj
+        [ls === List [a, d],
+         a === x,
+         d === out],
+     freshs 3 $ \[a, d, res] ->
+       conj
+        [ls === List [a, d],
+         a =/= x,
+         out === List [a, res],
+         rembero x d res]]
+
+
+testRembero = runAll $ \q -> rembero (Data 2) (fromList [1, 2, 3, 2, 4]) q
+
+
+
