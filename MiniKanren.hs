@@ -52,9 +52,8 @@ freshs n fn ps = fn (map (Var . show) [counter ps..counter ps + n-1])
 checkAssertions :: Eq a => Substitution a -> ProgramState a -> Bool
 checkAssertions subs ps = all check $ map fst subs
     where
-        check var = case lookup (Var var) (assertions ps) of
-               Nothing -> True
-               Just testHaskellFn -> testHaskellFn $ walk subs (Var var)
+        check var = all (\(_,fn) -> fn $ walk subs (Var var))
+            $ filter ((== Var var) . fst) (assertions ps)
 
 walk :: Substitution a -> Term a -> Term a
 walk subs (Var var) = case lookup var subs of
