@@ -76,6 +76,17 @@ assert term haskellFn ps = if checkAssertions (substitution ps') ps'
                               else []
     where ps' = ps { assertions = (term, haskellFn) : assertions ps }
 
+(=/=) :: Eq a => Term a -> Term a -> LogicOp a
+(=/=) p q ps = case unify (substitution ps) p q of
+                 Nothing -> return ps
+                 Just subs
+                    | length subs == length (substitution ps) -> []
+                    | otherwise -> return $ ps { assertions =
+                        map (\(var, term) -> (Var var, (/= term)))
+                            (take (length subs - length (substitution ps)) subs) ++
+                        assertions ps }
+
+
 conj :: [LogicOp a] -> LogicOp a
 conj = foldr conj1 return
     where conj1 x y ps = concatMap y $ x ps
