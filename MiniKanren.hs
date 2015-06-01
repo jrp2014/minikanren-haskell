@@ -49,12 +49,6 @@ freshs n fn ps = fn (map (Var . show) [counter ps..counter ps + n-1])
     Just subs | checkAssertions subs ps -> [ps { substitution = subs }]
     _ -> []
 
-checkAssertions :: Eq a => Substitution a -> ProgramState a -> Bool
-checkAssertions subs ps = all check $ map fst subs
-    where
-        check var = all (\(_,fn) -> fn $ walk subs (Var var))
-            $ filter ((== Var var) . fst) (assertions ps)
-
 walk :: Substitution a -> Term a -> Term a
 walk subs (Var var) = case lookup var subs of
     Nothing -> Var var
@@ -71,21 +65,10 @@ unify subs t u = case (walk subs t, walk subs u) of
     (Data x, Data y) | x == y -> return subs
     _ -> Nothing
 
-reify :: Term a -> Substitution a -> Term a
-reify v s = walkStar v' (reifyS v' [])
-    where v' = walkStar v s
-
-walkStar :: Term a -> Substitution a -> Term a
-walkStar v s = case v' of
-    List terms -> List $ map (`walkStar` s) terms
-    _ -> v'
-    where v' = walk s v
-
-reifyS :: Term a -> Substitution a -> Substitution a
-reifyS v s = case walk s v of
-    Var name -> (name, Var $ "_" ++ show (length s)) : s
-    List terms -> foldl (flip reifyS) s terms
-    Data _ -> s
+checkAssertions :: Eq a => Substitution a -> ProgramState a -> Bool
+checkAssertions subs ps = all check $ map fst subs
+    where check var = all (\(var', prop) ->
+              var' == Var var && prop (walk subs (Var var))) (assertions ps)
 
 assert :: Eq a => Term a -> (Term a -> Bool) -> LogicOp a
 assert term haskellFn ps = if checkAssertions (substitution ps') ps'
@@ -107,4 +90,20 @@ conde = foldr conde1 (const [])
         conde1 x y ps = together (x ps) (y ps)
         together [] xs = xs
         together (x:xs) ys = x : together ys xs
+
+reify :: Term a -> Substitution a -> Term a
+reify v s = walkStar v' (reifyS v' [])
+    where v' = walkStar v s
+
+walkStar :: Term a -> Substitution a -> Term a
+walkStar v s = case v' of
+    List terms -> List $ map (`walkStar` s) terms
+    _ -> v'
+    where v' = walk s v
+
+reifyS :: Term a -> Substitution a -> Substitution a
+reifyS v s = case walk s v of
+    Var name -> (name, Var $ "_" ++ show (length s)) : s
+    List terms -> foldl (flip reifyS) s terms
+    Data _ -> s
 
