@@ -12,16 +12,16 @@ data Term a
 data ProgramState a = ProgramState
     { counter :: Int
     , substitution :: Substitution a
---    , assertions :: Assertion a
+    , assertions :: Assertion a
     }
 type Substitution a = [(LogicVar, Term a)] -- TODO: Map?
--- type Assertion a = [(LogicVar, Term a -> Bool)]
+type Assertion a = [(Term a, Term a -> Bool)]
 type LogicOp a = ProgramState a -> [ProgramState a]
 type QueryProgram a = Term a -> LogicOp a
 
 runAll :: QueryProgram a -> [Term a]
 runAll program = map (reify (Var "q") . substitution) $
-    program (Var "q") $ ProgramState 0 []
+    program (Var "q") $ ProgramState 0 [] []
 
 run :: Int -> QueryProgram a -> [Term a]
 run solutions program = take solutions $ runAll program
@@ -46,8 +46,15 @@ freshs n fn ps = fn (map (Var . show) [counter ps..counter ps + n-1])
 
 (===) :: Eq a => Term a -> Term a -> LogicOp a
 (===) p q ps = case unify (substitution ps) p q of
-    Nothing -> []
-    Just subs -> [ps { substitution = subs }]
+    Just subs | checkAssertions subs ps -> [ps { substitution = subs }]
+    _ -> []
+
+checkAssertions :: Eq a => Substitution a -> ProgramState a -> Bool
+checkAssertions subs ps = all check $ map fst subs
+    where
+        check var = case lookup (Var var) (assertions ps) of
+               Nothing -> True
+               Just testHaskellFn -> testHaskellFn $ walk subs (Var var)
 
 walk :: Substitution a -> Term a -> Term a
 walk subs (Var var) = case lookup var subs of
@@ -80,6 +87,12 @@ reifyS v s = case walk s v of
     Var name -> (name, Var $ "_" ++ show (length s)) : s
     List terms -> foldl (flip reifyS) s terms
     Data _ -> s
+
+assert :: Eq a => Term a -> (Term a -> Bool) -> LogicOp a
+assert term haskellFn ps = if checkAssertions (substitution ps') ps'
+                              then return ps'
+                              else []
+    where ps' = ps { assertions = (term, haskellFn) : assertions ps }
 
 conj :: [LogicOp a] -> LogicOp a
 conj = foldr conj1 return
