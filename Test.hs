@@ -70,7 +70,6 @@ rembero x ls out = conde
          out === List [a, res],
          rembero x d res]]
 
-
 testRembero = runAll $ \q -> rembero (Data 2) (fromList [1, 2, 3, 2, 4]) q
 
 

@@ -12,10 +12,9 @@ data Term a
 data ProgramState a = ProgramState
     { counter :: Int
     , substitution :: Substitution a
-    , assertions :: Assertion a
+    , disEqStore :: [Substitution a]
     }
-type Substitution a = [(LogicVar, Term a)] -- TODO: Map?
-type Assertion a = [(Term a, Term a -> Bool)]
+type Substitution a = [(LogicVar, Term a)]
 type LogicOp a = ProgramState a -> [ProgramState a]
 type QueryProgram a = Term a -> LogicOp a
 
@@ -66,26 +65,20 @@ unify subs t u = case (walk subs t, walk subs u) of
     _ -> Nothing
 
 checkAssertions :: Eq a => Substitution a -> ProgramState a -> Bool
-checkAssertions subs ps = all check $ map fst subs
-    where check var = all (\(var', prop) ->
-              var' == Var var && prop (walk subs (Var var))) (assertions ps)
-
-assert :: Eq a => Term a -> (Term a -> Bool) -> LogicOp a
-assert term haskellFn ps = if checkAssertions (substitution ps') ps'
-                              then return ps'
-                              else []
-    where ps' = ps { assertions = (term, haskellFn) : assertions ps }
+checkAssertions subs ps = all exclude (disEqStore ps)
+    where exclude noSubs = all (\(var, _) ->
+              walk noSubs (Var var) /= walk subs (Var var)) noSubs
 
 (=/=) :: Eq a => Term a -> Term a -> LogicOp a
 (=/=) p q ps = case unify (substitution ps) p q of
                  Nothing -> return ps
                  Just subs
+                    -- we fail here if there are allready equal
+                    -- so we dont need checkAssertions here
                     | length subs == length (substitution ps) -> []
-                    | otherwise -> return $ ps { assertions =
-                        map (\(var, term) -> (Var var, (/= term)))
-                            (take (length subs - length (substitution ps)) subs) ++
-                        assertions ps }
-
+                    | otherwise -> return $ ps { disEqStore =
+                            take (length subs - length (substitution ps)) subs
+                            : disEqStore ps }
 
 conj :: [LogicOp a] -> LogicOp a
 conj = foldr conj1 return
