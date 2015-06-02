@@ -45,6 +45,7 @@ freshs :: Int -> ([Term a] -> LogicOp a) -> LogicOp a
 freshs n fn ps = fn (map (Var . show) [counter ps..counter ps + n-1])
     (ps { counter = counter ps + n })
 
+infix 4 ===
 (===) :: Eq a => Term a -> Term a -> LogicOp a
 (===) p q ps = case unify (substitution ps) p q of
     Just subs | checkAssertions subs ps -> [ps { substitution = subs }]
@@ -71,6 +72,7 @@ checkAssertions subs ps = all exclude (disEqStore ps)
     where exclude noSubs = all (\(var, _) ->
               walk noSubs (Var var) /= walk subs (Var var)) noSubs
 
+infix 4 =/=
 (=/=) :: Eq a => Term a -> Term a -> LogicOp a
 (=/=) p q ps = case unify (substitution ps) p q of
                  Nothing -> return ps
@@ -83,17 +85,23 @@ checkAssertions subs ps = all exclude (disEqStore ps)
                             : disEqStore ps }
 
 conj :: [LogicOp a] -> LogicOp a
-conj = foldr conj1 return
-    where conj1 x y ps = concatMap y $ x ps
+conj = foldr (&) return
+
+infixl 3 &
+(&) :: LogicOp a -> LogicOp a -> LogicOp a
+(&) x y ps = concatMap y $ x ps
 
 condeDepthFirst :: [LogicOp a] -> LogicOp a
 condeDepthFirst = foldr condeDepthFirst1 (const [])
     where condeDepthFirst1 x y ps = x ps ++ y ps
 
 conde :: [LogicOp a] -> LogicOp a
-conde = foldr conde1 (const [])
+conde = foldr (<|>) (const [])
+
+infixl 2 <|>
+(<|>) :: LogicOp a -> LogicOp a -> LogicOp a
+(<|>) a b ps = together (a ps) (b ps)
     where
-        conde1 x y ps = together (x ps) (y ps)
         together [] xs = xs
         together (x:xs) ys = x : together ys xs
 
