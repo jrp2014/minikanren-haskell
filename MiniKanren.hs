@@ -18,11 +18,13 @@ type Substitution a = [(LogicVar, Term a)]
 type LogicOp a = ProgramState a -> [ProgramState a]
 type QueryProgram a = Term a -> LogicOp a
 
-runAll :: QueryProgram a -> [Term a]
-runAll program = map (reify (Var "q") . substitution) $
+runAll :: QueryProgram a -> [(Term a, [Term a])]
+runAll program = map (\ps ->
+        (reify (Var "q") (substitution ps),
+         map (flip walk $ Var "q") $ disEqStore ps)) $
     program (Var "q") $ ProgramState 0 [] []
 
-run :: Int -> QueryProgram a -> [Term a]
+run :: Int -> QueryProgram a -> [(Term a, [Term a])]
 run solutions program = take solutions $ runAll program
 
 runStep :: Show a => QueryProgram a -> IO Bool
