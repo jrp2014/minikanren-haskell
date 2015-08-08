@@ -4,7 +4,7 @@ import MiniKanren
 
 appendo xs ys res =
     conde
-        [conj [xs === List [], ys === res],
+        [xs === List [] /\ ys === res,
          freshs 3 $ \[car, cdr, rec] ->
             conj [xs === List [car, cdr],
                   res === List [car, rec],

@@ -4,7 +4,8 @@ module MiniKanren (
   runAll, run, runStep,
   fresh, freshs,
   (===), (=/=),
-  conj, conde, condeDepthFirst
+  conj, conde, condeDepthFirst,
+  (/\), (\/)
   ) where
 
 import Control.Monad (foldM)
@@ -92,22 +93,22 @@ infix 4 =/=
                             : disEqStore ps }
 
 conj :: [LogicOp a] -> LogicOp a
-conj = foldr (&) return
+conj = foldr (/\) return
 
-infixl 3 &
-(&) :: LogicOp a -> LogicOp a -> LogicOp a
-(&) x y ps = concatMap y $ x ps
+infixl 3 /\
+(/\) :: LogicOp a -> LogicOp a -> LogicOp a
+(/\) x y ps = concatMap y $ x ps
 
 condeDepthFirst :: [LogicOp a] -> LogicOp a
 condeDepthFirst = foldr condeDepthFirst1 (const [])
     where condeDepthFirst1 x y ps = x ps ++ y ps
 
 conde :: [LogicOp a] -> LogicOp a
-conde = foldr (<|>) (const [])
+conde = foldr (\/) (const [])
 
-infixl 2 <|>
-(<|>) :: LogicOp a -> LogicOp a -> LogicOp a
-(<|>) a b ps = together (a ps) (b ps)
+infixl 2 \/
+(\/) :: LogicOp a -> LogicOp a -> LogicOp a
+(\/) a b ps = together (a ps) (b ps)
     where
         together [] xs = xs
         together (x:xs) ys = x : together ys xs
