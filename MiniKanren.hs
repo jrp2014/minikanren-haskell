@@ -1,4 +1,11 @@
-module MiniKanren where
+module MiniKanren (
+  LogicVar, Term(..), ProgramState(..),
+  Substitution, LogicOp, QueryProgram,
+  runAll, run, runStep,
+  fresh, freshs,
+  (===), (=/=),
+  conj, conde, condeDepthFirst
+  ) where
 
 import Control.Monad (foldM)
 import System.IO (hFlush, stdout)
