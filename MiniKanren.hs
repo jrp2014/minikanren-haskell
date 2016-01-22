@@ -11,30 +11,50 @@ module MiniKanren (
 import Control.Monad (foldM)
 import System.IO (hFlush, stdout)
 
+-- | Logic variables are repesented as strings
 type LogicVar = String
+
+-- | a term is either a logic variable, some haskell data or a list of terms
 data Term a
     = Var LogicVar
     | Data a
     | List [Term a]
     deriving (Show, Eq, Read)
+
+-- | The state of the minikanren interpreter
 data ProgramState a = ProgramState
-    { counter :: Int
-    , substitution :: Substitution a
-    , disEqStore :: [Substitution a]
+    { counter :: Int -- ^ a count to create new intermediate variables
+    , substitution :: Substitution a -- ^ a substitution for evalues to be known equal
+    , disEqStore :: [Substitution a] -- ^ a list of substitutions for things to be known inequal
+                                     --   (these are seperated because there might be not true at the same time
     }
+
+-- | A Substitution is a mapping from logic variables to other terms
 type Substitution a = [(LogicVar, Term a)]
+
+-- | A logic operation takes a state and returns every possible state produced by this operation
+--   e.g.: Input state: x -> 1
+--         Operation: y = 2 \/ y = 3
+--         List of possible output states: x -> 1, y -> 2; x -> 1, y -> 3
 type LogicOp a = ProgramState a -> [ProgramState a]
+
+-- | a query program is a logic operation witch takes an input term
 type QueryProgram a = Term a -> LogicOp a
 
+-- | returns all values for a variable "q" in a query program and there inequalities
 runAll :: QueryProgram a -> [(Term a, [Term a])]
 runAll program = map (\ps ->
         (reify (Var "q") (substitution ps),
          map (flip walk $ Var "q") $ disEqStore ps)) $
     program (Var "q") $ ProgramState 0 [] []
 
+-- | returns the first n values for a variable "q" in a query program and there inequalities
 run :: Int -> QueryProgram a -> [(Term a, [Term a])]
 run solutions program = take solutions $ runAll program
 
+-- | runs a query program interactivly (link in a prolog intepreter)
+--   just hit enter (insert blank lines) to get more solutions
+--   type anything else to exit
 runStep :: Show a => QueryProgram a -> IO Bool
 runStep program = loop (runAll program)
     where
@@ -46,25 +66,23 @@ runStep program = loop (runAll program)
                 "" -> loop subss
                 _ -> return True
 
+-- | creates a new logic variable and runs it inside a LogicOp
 fresh :: (Term a -> LogicOp a) -> LogicOp a
 fresh fn ps = fn (Var $ show $ counter ps) (ps { counter = counter ps + 1 })
 
+-- | creates n new logic variables and runs them inside a LogicOp
 freshs :: Int -> ([Term a] -> LogicOp a) -> LogicOp a
 freshs n fn ps = fn (map (Var . show) [counter ps..counter ps + n-1])
     (ps { counter = counter ps + n })
 
+-- | assert the equality of two terms, changes the local state (substitution)
 infix 4 ===
 (===) :: Eq a => Term a -> Term a -> LogicOp a
 (===) p q ps = case unify (substitution ps) p q of
     Just subs | checkAssertions subs ps -> [ps { substitution = subs }]
     _ -> []
 
-walk :: Substitution a -> Term a -> Term a
-walk subs (Var var) = case lookup var subs of
-    Nothing -> Var var
-    Just term -> walk subs term
-walk _    other     = other
-
+-- | try to get a substitution witch makes the given terms equal
 unify :: Eq a => Substitution a -> Term a -> Term a -> Maybe (Substitution a)
 unify subs t u = case (walk subs t, walk subs u) of
     (Var v, Var w) | v == w -> return subs
@@ -75,11 +93,13 @@ unify subs t u = case (walk subs t, walk subs u) of
     (Data x, Data y) | x == y -> return subs
     _ -> Nothing
 
+-- | check if all inequalities are satisfied
 checkAssertions :: Eq a => Substitution a -> ProgramState a -> Bool
 checkAssertions subs ps = all exclude (disEqStore ps)
     where exclude noSubs = all (\(var, _) ->
               walk noSubs (Var var) /= walk subs (Var var)) noSubs
 
+-- | assert the inequality of two terms, changes the local state (disEqStore)
 infix 4 =/=
 (=/=) :: Eq a => Term a -> Term a -> LogicOp a
 (=/=) p q ps = case unify (substitution ps) p q of
@@ -92,20 +112,25 @@ infix 4 =/=
                             take (length subs - length (substitution ps)) subs
                             : disEqStore ps }
 
+-- | helper to create a logic operation bunch of conjugated logic operations
 conj :: [LogicOp a] -> LogicOp a
 conj = foldr (/\) return
 
+-- | conjunction: combine two logic operations such that both are satisfied
 infixl 3 /\
 (/\) :: LogicOp a -> LogicOp a -> LogicOp a
 (/\) x y ps = concatMap y $ x ps
 
+-- | uses depth first search for disjunction
 condeDepthFirst :: [LogicOp a] -> LogicOp a
 condeDepthFirst = foldr condeDepthFirst1 (const [])
     where condeDepthFirst1 x y ps = x ps ++ y ps
 
+-- | helper to create a logic operation bunch of disjunct logic operations
 conde :: [LogicOp a] -> LogicOp a
 conde = foldr (\/) (const [])
 
+-- | disjunction: combines two logic operations such that one or both of them are satisfied
 infixl 2 \/
 (\/) :: LogicOp a -> LogicOp a -> LogicOp a
 (\/) a b ps = together (a ps) (b ps)
@@ -113,16 +138,26 @@ infixl 2 \/
         together [] xs = xs
         together (x:xs) ys = x : together ys xs
 
+-- | apply a substitution on a term, and replacing all variables by there equal terms
+walk :: Substitution a -> Term a -> Term a
+walk subs (Var var) = case lookup var subs of
+    Nothing -> Var var
+    Just term -> walk subs term
+walk _    other     = other
+
+-- | every variable in the term is either substituted using the substitution or by a default substitution
 reify :: Term a -> Substitution a -> Term a
 reify v s = walkStar v' (reifyS v' [])
     where v' = walkStar v s
 
+-- | walk a term with a substitution until walk dosen't produce new nested structures
 walkStar :: Term a -> Substitution a -> Term a
 walkStar v s = case v' of
     List terms -> List $ map (`walkStar` s) terms
     _ -> v'
     where v' = walk s v
 
+-- | adds default a substitution for every variable in the term
 reifyS :: Term a -> Substitution a -> Substitution a
 reifyS v s = case walk s v of
     Var name -> (name, Var $ "_" ++ show (length s)) : s
