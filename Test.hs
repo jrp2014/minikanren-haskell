@@ -3,7 +3,7 @@ module Test where
 import MiniKanren
 
 -- appendo
-appendo :: Eq a => Term a -> Term a -> Term a -> LogicOp a
+appendo :: Eq a => Term a -> Term a -> Term a -> Goal a
 appendo xs ys res =
     conde
         [xs === List [] /\ ys === res,
@@ -28,21 +28,21 @@ testBack1 = runAll $ \a -> freshs 2 $ \[b,c] ->
          appendo a b c]
 
 -- ns df search test
-nsDF :: Int -> Term Int -> LogicOp Int
-nsDF n x = condeDepthFirst [x === Data n, nsDF n x]
+nsDF :: Int -> Term Int -> Goal Int
+nsDF n x = condeDepthFirst [x === Atom n, nsDF n x]
 
 testNumbersDF :: [(Term Int, [Term Int])]
 testNumbersDF = run 10 $ \x -> condeDepthFirst [nsDF 5 x, nsDF 6 x]
 
-ns :: Int -> Term Int -> LogicOp Int
-ns n x = conde [x === Data n, ns n x]
+ns :: Int -> Term Int -> Goal Int
+ns n x = conde [x === Atom n, ns n x]
 
 testNumbers :: [(Term Int, [Term Int])]
 testNumbers = run 10 $ \x -> conde [ns 5 x, ns 6 x]
 
 
 -- rembero
-rembero :: Eq a => Term a -> Term a -> Term a -> LogicOp a
+rembero :: Eq a => Term a -> Term a -> Term a -> Goal a
 rembero x ls out = conde
     [conj
         [ls === List [],
@@ -60,7 +60,7 @@ rembero x ls out = conde
          rembero x d res]]
 
 testRembero :: [(Term Int, [Term Int])]
-testRembero = runAll $ \q -> rembero (Data 2) (fromList [1, 2, 3, 2, 4]) q
+testRembero = runAll $ \q -> rembero (Atom 2) (fromList [1, 2, 3, 2, 4]) q
 
 -- util
 toList :: Term a -> [Term a]
@@ -69,6 +69,14 @@ toList (List []) = []
 toList x = [x]
 
 fromList :: [a] -> Term a
-fromList = foldr (\x acc -> List [Data x, acc]) (List [])
+fromList = foldr (\x acc -> List [Atom x, acc]) (List [])
+
+emptyEnv :: Environment a
+emptyEnv = Environment {counter=0, substitution=[], disEqStore=[[]]}
+
+aAndB :: Goal String
+aAndB = 
+    (fresh (\a -> a === Atom "7")) /\
+    (fresh (\b -> (b === Atom "5") \/(b === Atom "6")))
 
 

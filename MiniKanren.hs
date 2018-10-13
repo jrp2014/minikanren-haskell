@@ -1,6 +1,6 @@
 module MiniKanren (
-  LogicVar, Term(..), ProgramState(..),
-  Substitution, LogicOp, QueryProgram,
+  LogicVar, Term(..), Environment(..),
+  Substitution, Goal, QueryProgram,
   runAll, run, runStep,
   fresh, freshs,
   (===), (=/=),
@@ -10,6 +10,7 @@ module MiniKanren (
 
 import Control.Monad (foldM)
 import System.IO (hFlush, stdout)
+import Data.List (transpose)
 
 -- | Logic variables are repesented as strings
 type LogicVar = String
@@ -17,36 +18,36 @@ type LogicVar = String
 -- | a term is either a logic variable, some haskell data or a list of terms
 data Term a
     = Var LogicVar
-    | Data a
+    | Atom a
     | List [Term a]
     deriving (Show, Eq, Read)
 
 -- | The state of the minikanren interpreter
-data ProgramState a = ProgramState
+data Environment a = Environment
     { counter :: Int -- ^ a count to create new intermediate variables
     , substitution :: Substitution a -- ^ a substitution for evalues to be known equal
     , disEqStore :: [Substitution a] -- ^ a list of substitutions for things to be known inequal
                                      --   (these are seperated because there might be not true at the same time
-    }
+    } deriving Show
 
 -- | A Substitution is a mapping from logic variables to other terms
 type Substitution a = [(LogicVar, Term a)]
 
--- | A logic operation takes a state and returns every possible state produced by this operation
+-- | A goal takes a state and returns every possible state produced by this operation
 --   e.g.: Input state: x -> 1
 --         Operation: y = 2 \/ y = 3
 --         List of possible output states: x -> 1, y -> 2; x -> 1, y -> 3
-type LogicOp a = ProgramState a -> [ProgramState a]
+type Goal a = Environment a -> [Environment a]
 
--- | a query program is a logic operation witch takes an input term
-type QueryProgram a = Term a -> LogicOp a
+-- | a query program is a goal that takes an input term
+type QueryProgram a = Term a -> Goal a
 
 -- | returns all values for a variable "q" in a query program and there inequalities
 runAll :: QueryProgram a -> [(Term a, [Term a])]
 runAll program = map (\ps ->
         (reify (Var "q") (substitution ps),
          map (flip walk $ Var "q") $ disEqStore ps)) $
-    program (Var "q") $ ProgramState 0 [] []
+    program (Var "q") $ Environment 0 [] []
 
 -- | returns the first n values for a variable "q" in a query program and there inequalities
 run :: Int -> QueryProgram a -> [(Term a, [Term a])]
@@ -58,6 +59,7 @@ run solutions program = take solutions $ runAll program
 runStep :: Show a => QueryProgram a -> IO Bool
 runStep program = loop (runAll program)
     where
+        loop :: Show a => [a] -> IO Bool
         loop [] = return False
         loop (subs:subss) = do
             putStr (show subs ++ " "); hFlush stdout
@@ -66,18 +68,18 @@ runStep program = loop (runAll program)
                 "" -> loop subss
                 _ -> return True
 
--- | creates a new logic variable and runs it inside a LogicOp
-fresh :: (Term a -> LogicOp a) -> LogicOp a
-fresh fn ps = fn (Var $ show $ counter ps) (ps { counter = counter ps + 1 })
+-- | creates a new logic variable and runs it inside a Goal
+fresh :: QueryProgram a -> Goal a
+fresh fn env = fn (Var $ show $ counter env) (env { counter = counter env + 1 })
 
--- | creates n new logic variables and runs them inside a LogicOp
-freshs :: Int -> ([Term a] -> LogicOp a) -> LogicOp a
-freshs n fn ps = fn (map (Var . show) [counter ps..counter ps + n-1])
-    (ps { counter = counter ps + n })
+-- | creates n new logic variables and runs them inside a Goal
+freshs :: Int -> ([Term a] -> Goal a) -> Goal a
+freshs n fn env = fn (map (Var . show) [counter env..counter env + n-1])
+    (env { counter = counter env + n })
 
 -- | assert the equality of two terms, changes the local state (substitution)
 infix 4 ===
-(===) :: Eq a => Term a -> Term a -> LogicOp a
+(===) :: Eq a => Term a -> Term a -> Goal a
 (===) p q ps = case unify (substitution ps) p q of
     Just subs | checkAssertions subs ps -> [ps { substitution = subs }]
     _ -> []
@@ -90,22 +92,22 @@ unify subs t u = case (walk subs t, walk subs u) of
     (term, Var v) -> return $ (v, term) : subs
     (List vs, List us) | length vs == length us ->
         foldM (\subs' (v, w) -> unify subs' v w) subs $ zip vs us
-    (Data x, Data y) | x == y -> return subs
+    (Atom x, Atom y) | x == y -> return subs
     _ -> Nothing
 
 -- | check if all inequalities are satisfied
-checkAssertions :: Eq a => Substitution a -> ProgramState a -> Bool
+checkAssertions :: Eq a => Substitution a -> Environment a -> Bool
 checkAssertions subs ps = all exclude (disEqStore ps)
     where exclude noSubs = all (\(var, _) ->
               walk noSubs (Var var) /= walk subs (Var var)) noSubs
 
 -- | assert the inequality of two terms, changes the local state (disEqStore)
 infix 4 =/=
-(=/=) :: Eq a => Term a -> Term a -> LogicOp a
+(=/=) :: Eq a => Term a -> Term a -> Goal a
 (=/=) p q ps = case unify (substitution ps) p q of
                  Nothing -> return ps
                  Just subs
-                    -- we fail here if there are allready equal
+                    -- we fail here if they are already equal
                     -- so we dont need checkAssertions here
                     | length subs == length (substitution ps) -> []
                     | otherwise -> return $ ps { disEqStore =
@@ -113,37 +115,36 @@ infix 4 =/=
                             : disEqStore ps }
 
 -- | helper to create a logic operation bunch of conjugated logic operations
-conj :: [LogicOp a] -> LogicOp a
+conj :: [Goal a] -> Goal a
 conj = foldr (/\) return
 
 -- | conjunction: combine two logic operations such that both are satisfied
 infixl 3 /\
-(/\) :: LogicOp a -> LogicOp a -> LogicOp a
+(/\) :: Goal a -> Goal a -> Goal a
 (/\) x y ps = concatMap y $ x ps
 
 -- | uses depth first search for disjunction
-condeDepthFirst :: [LogicOp a] -> LogicOp a
-condeDepthFirst = foldr condeDepthFirst1 (const [])
-    where condeDepthFirst1 x y ps = x ps ++ y ps
+condeDepthFirst :: [Goal a] -> Goal a
+condeDepthFirst = foldr condeDepthFirstSearch' (const [])
+    where
+      condeDepthFirstSearch' :: --forall a t.
+                            (t -> [a]) -> (t -> [a]) -> t -> [a]
+      condeDepthFirstSearch' x y ps = x ps ++ y ps
 
 -- | helper to create a logic operation bunch of disjunct logic operations
-conde :: [LogicOp a] -> LogicOp a
+conde :: [Goal a] -> Goal a
 conde = foldr (\/) (const [])
 
 -- | disjunction: combines two logic operations such that one or both of them are satisfied
 infixl 2 \/
-(\/) :: LogicOp a -> LogicOp a -> LogicOp a
-(\/) a b ps = together (a ps) (b ps)
-    where
-        together [] xs = xs
-        together (x:xs) ys = x : together ys xs
+(\/) :: Goal a -> Goal a -> Goal a
+(\/) a b ps = (concat . transpose) [a ps,  b ps]
+--(\/) a b ps = (a ps) ++ (b ps) -- depth first?
 
 -- | apply a substitution on a term, and replacing all variables by there equal terms
 walk :: Substitution a -> Term a -> Term a
-walk subs (Var var) = case lookup var subs of
-    Nothing -> Var var
-    Just term -> walk subs term
-walk _    other     = other
+walk subs var@(Var v) = maybe var (walk subs) (lookup v subs)   
+walk _    term        = term
 
 -- | every variable in the term is either substituted using the substitution or by a default substitution
 reify :: Term a -> Substitution a -> Term a
@@ -162,5 +163,5 @@ reifyS :: Term a -> Substitution a -> Substitution a
 reifyS v s = case walk s v of
     Var name -> (name, Var $ "_" ++ show (length s)) : s
     List terms -> foldl (flip reifyS) s terms
-    Data _ -> s
+    Atom _ -> s
 
