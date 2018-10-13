@@ -20,7 +20,12 @@ data Term a
     = Var LogicVar
     | Atom a
     | List [Term a]
-    deriving (Show, Eq, Read)
+    deriving (Eq, Read)
+
+instance Show a => Show (Term a) where
+  show (Var v) = '_' : show v
+  show (Atom a) = show a
+  show (List l) = show l
 
 -- | The state of the minikanren interpreter
 data Environment a = Environment
