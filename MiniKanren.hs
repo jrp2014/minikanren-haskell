@@ -5,7 +5,8 @@ module MiniKanren (
   fresh, freshs,
   (===), (=/=),
   conj, conde, condeDepthFirst,
-  (/\), (\/)
+  (/\), (\/),
+  anyo
   ) where
 
 import Control.Monad (foldM)
@@ -23,7 +24,7 @@ data Term a
     deriving (Eq, Read)
 
 instance Show a => Show (Term a) where
-  show (Var v) = '_' : show v
+  show (Var v) = '_' : v
   show (Atom a) = show a
   show (List l) = show l
 
@@ -34,6 +35,9 @@ data Environment a = Environment
     , disEqStore :: [Substitution a] -- ^ a list of substitutions for things to be known inequal
                                      --   (these are seperated because there might be not true at the same time
     } deriving Show
+
+emptyEnv :: Environment a
+emptyEnv = Environment {counter=0, substitution=[], disEqStore=[[]]}
 
 -- | A Substitution is a mapping from logic variables to other terms
 type Substitution a = [(LogicVar, Term a)]
@@ -52,7 +56,7 @@ runAll :: QueryProgram a -> [(Term a, [Term a])]
 runAll program = map (\ps ->
         (reify (Var "q") (substitution ps),
          map (flip walk $ Var "q") $ disEqStore ps)) $
-    program (Var "q") $ Environment 0 [] []
+    program (Var "q") $ emptyEnv
 
 -- | returns the first n values for a variable "q" in a query program and there inequalities
 run :: Int -> QueryProgram a -> [(Term a, [Term a])]
@@ -143,8 +147,13 @@ conde = foldr (\/) (const [])
 -- | disjunction: combines two logic operations such that one or both of them are satisfied
 infixl 2 \/
 (\/) :: Goal a -> Goal a -> Goal a
-(\/) a b ps = (concat . transpose) [a ps,  b ps]
---(\/) a b ps = (a ps) ++ (b ps) -- depth first?
+--(\/) a b ps = (concat . transpose) [a ps,  b ps] -- fairer?
+(\/) a b ps = (a ps) ++ (b ps) -- depth first?
+
+anyo :: Goal a -> Goal a
+anyo g = conde $ repeat g
+--anyo g = conde [g, anyo g]
+
 
 -- | apply a substitution on a term, and replacing all variables by there equal terms
 walk :: Substitution a -> Term a -> Term a

@@ -79,4 +79,15 @@ aAndB =
     (fresh (\a -> a === Atom "7")) /\
     (fresh (\b -> (b === Atom "5") \/(b === Atom "6")))
 
+-- The followmg should all give  [(3,[_q])]
+test1 = runAll $ \y -> freshs 2 $ \[x, z] -> x === z /\ Atom 3 === y
+test2 = runAll $ \y -> freshs 2 $ \[x, z] -> conj [x === z, Atom 3 === y]
+test3 = runAll $ \q -> freshs 2 $ \[x, z] -> conj [x === z, Atom 3 === z,
+                                                   q === x]
+test4 = runAll $ \y -> (freshs 2 $ \[x, y] -> conj [Atom 4 === x,
+                                                    x === y]) /\
+                       Atom 3 === y
 
+
+test6 = run 20 $ \q -> anyo (conde [ Atom 1 === q, Atom 2 === q,
+                                     Atom 3 === q])
