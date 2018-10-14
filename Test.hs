@@ -68,7 +68,6 @@ fromList = foldr (\x acc -> List [Atom x, acc]) (List [])
 
 --emptyEnv :: Environment a
 --emptyEnv = Environment {counter = 0, substitution = [], disEqStore = [[]]}
-
 aAndB :: Goal String
 aAndB =
   fresh (\a -> a === Atom "7") /\
@@ -95,3 +94,15 @@ test4 =
 
 test5 :: [(Term Int, [Term Int])]
 test5 = run 20 $ \q -> anyo (conde [Atom 1 === q, Atom 2 === q, Atom 3 === q])
+
+-- Not sure about all the following
+test6 = runAll $ \q -> q =/= Atom 1
+
+test7 = runAll $ \q -> (q =/= Atom 1) /\ (q === Atom 1)
+
+test8 = runAll $ \q -> conj [q =/= Atom 1, q === Atom 1]
+
+test9 =
+  runAll $ \q ->
+    freshs 2 $ \[p, r] ->
+      conj [fromList [1, 2] =/= List [p, r], List [p, r] === q]

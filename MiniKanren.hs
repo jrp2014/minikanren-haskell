@@ -63,7 +63,7 @@ type Goal a = Environment a -> [Environment a]
 -- | a query program is a goal that takes an input term
 type QueryProgram a = Term a -> Goal a
 
--- | returns all values for a variable "q" in a query program and there inequalities
+-- | returns all values for a variable "q" in a query program and their inequalities
 runAll :: QueryProgram a -> [(Term a, [Term a])]
 runAll program =
   map
@@ -153,15 +153,16 @@ infix 4 =/=
               take (length subs - length (substitution ps)) subs : disEqStore ps
           }
 
--- | helper to create a logic operation bunch of conjugated logic operations
+-- | helper to create a goal bunch of conjugated goals
 conj :: [Goal a] -> Goal a
 conj = foldr (/\) return
 
--- | conjunction: combine two logic operations such that both are satisfied
+-- | conjunction: combine two goals such that both are satisfied
 infixl 3 /\
 
 (/\) :: Goal a -> Goal a -> Goal a
 (/\) x y ps = concatMap y $ x ps
+-- /\ = flip (<=<)
 
 -- | uses depth first search for disjunction
 condeDepthFirst :: [Goal a] -> Goal a
@@ -172,11 +173,15 @@ condeDepthFirst = foldr condeDepthFirstSearch' (const [])
          (t -> [a]) -> (t -> [a]) -> t -> [a]
     condeDepthFirstSearch' x y ps = x ps ++ y ps
 
--- | helper to create a logic operation bunch of disjunct logic operations
+-- | helper to create a goal bunch of disjunct goals
 conde :: [Goal a] -> Goal a
 conde = foldr (\/) (const [])
 
--- | disjunction: combines two logic operations such that one or both of them are satisfied
+-- | helper to to create a goal with a conjunction of goals
+programme :: [Goal a] -> Goal a
+programme = foldr (/\) return
+
+-- | disjunction: combines two goals such that one or both of them are satisfied
 infixl 2 \/
 
 (\/) :: Goal a -> Goal a -> Goal a
